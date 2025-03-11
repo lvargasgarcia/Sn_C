@@ -51,7 +51,7 @@ class YoungTableau {
         vector<int> subpartition;
         int d;
 
-        YoungTableau(const vector<int>& partition) {
+        YoungTableau(const vector<int> partition) {
             
             shape = partition;
             n = accumulate(shape.begin(), shape.end(), 0);
@@ -103,7 +103,7 @@ class YoungTableau {
         }
     
         // Function to generate first-level Young tableaux
-    static vector<YoungTableau> young_tableaux_1stlevel(const vector<int>& partition) {
+    static vector<YoungTableau> young_tableaux_1stlevel(const vector<int> partition) {
         vector<YoungTableau> result;
         for (size_t i = 0; i < partition.size(); ++i) {
             int j = partition[i] - 1;
@@ -122,7 +122,7 @@ class YoungTableau {
 
     // Function to generate second-level Young tableaux
 
-    static vector<YoungTableau> young_tableaux_2ndlevel(const vector<int>& partition) {
+    static vector<YoungTableau> young_tableaux_2ndlevel(const vector<int> partition) {
         vector<YoungTableau> first_level = young_tableaux_1stlevel(partition);
         vector<YoungTableau> second_level;
         for(size_t i = 0; i < first_level.size(); ++i) {
