@@ -341,17 +341,18 @@ template <typename T> class FourierTransform {
         return vec_A.dot(vec_B);
     }
 
-    static inline T frobenius_inner_product(Matrix& A, const SparseMatrix& B) {        
+    
+    static inline T frobenius_inner_product(const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>& A, 
+                                            const Eigen::SparseMatrix<T, Eigen::ColMajor>& B) {
         T result = 0;
         for (int k = 0; k < B.outerSize(); ++k) {
-            for (typename Eigen::SparseMatrix<T>::InnerIterator it(B, k); it; ++it) {
-                int row = it.row();
-                int col = it.col();
-                result += A(row, col) * it.value();
+            for (typename Eigen::SparseMatrix<T, Eigen::ColMajor>::InnerIterator it(B, k); it; ++it) {
+                result += A.coeff(it.row(), it.col()) * it.value();
             }
         }
         return result;
     }
+    
     
 
 };
