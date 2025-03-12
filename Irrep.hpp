@@ -17,7 +17,7 @@ using namespace std;
 
 
 template <typename T> class Irrep {
-    
+
     public:
 
     using BlockMatrix = vector<vector<pair<pair<int, int>, T>>>;
@@ -123,7 +123,7 @@ template <typename T> class Irrep {
 
 
     static Matrix decompress_matrix(BlockMatrix matrix) {
-        
+
         size_t dim = accumulate(matrix.begin(), matrix.end(), 0, [](size_t a, vector<pair<pair<int, int>, T>> b) {return a + b[0].first.first;});
         vector<Matrix> rows(matrix.size());
 
@@ -155,7 +155,7 @@ template <typename T> class Irrep {
         vector<YoungTableau> tableaux = YoungTableau::young_tableaux_2ndlevel(partition);
         int n = tableaux.size();
         BlockMatrix matrix = BlockMatrix(n, vector<pair<pair<int, int>, T>>(n, {{-1, -1}, T(0)}));
-        //diagonal 
+        //diagonal
         for(int i = 0; i < n; i++) {
             YoungTableau yt = tableaux[i];
             int a = yt.y_symbol[0].first;
@@ -175,7 +175,7 @@ template <typename T> class Irrep {
             for(int j = 0; j < n; ++j){
 
                 if (i < j){
-                    
+
                     YoungTableau yt1 = tableaux[i];
                     YoungTableau yt2 = tableaux[j];
 
@@ -183,7 +183,7 @@ template <typename T> class Irrep {
                     int d2 = yt2.d;
 
                     if(yt1.subpartition == yt2.subpartition){
-                        
+
                         int a = yt1.y_symbol[0].first;
                         int b = yt1.y_symbol[0].second;
                         int c = yt1.y_symbol[1].first;
@@ -221,7 +221,7 @@ template <typename T> class Irrep {
             }
         }
         return matrix;
-    }  
+    }
 
 };
 

@@ -1,7 +1,5 @@
-
+from smwtp import *
 import itertools
-
-import fourierTransform 
 
 class FunctionFromSamples:
 	fn = None
@@ -18,8 +16,8 @@ class FunctionFromSamples:
 				self.n = len(perm)
 				self.fn = {}
 
-			val = float(a[0])
-			self.fn[tuple(perm)] = val
+			val = int(float(a[0])*1000)
+			self.fn[to_int(perm)] = val
 			if self.globalMin == None or val < self.globalMin:
 				self.globalMin=val
 			if self.globalMax == None or val > self.globalMax:
@@ -36,13 +34,3 @@ class FunctionFromSamples:
 
 	def getFunction(self):
 		return self.fn
-
-problem = FunctionFromSamples("instances/arp/arp_8_17.csv")
-
-for pi in itertools.permutations(range(1, 9)):
-	print(pi, problem.fn[pi])
-
-def f (pi):
-	return problem.fn[pi]
-
-ft = fourierTransform.FourierTransform(8, f, "YKR")

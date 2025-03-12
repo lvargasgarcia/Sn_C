@@ -3,6 +3,7 @@ import itertools
 import numpy as np
 import fourier_transform as fourier
 from smwtp import *
+from fractions import Fraction
 
 global TOLERANCE
 
@@ -104,16 +105,30 @@ def showPermutationRanking(n, f):
 	for p in allPermutations(n):
 		print(f'{p}\t{ranking[p]}')
 
-def analysis(instance, output, mode="YSR"):
+def analysis(instance, output, mode="YSR", type="double"):
 	
-	f = open(output, "w")
+	if type == "double":
+		f = open(output, "w")
+		f.write("----------------- Floating point (64 bits) -----------------\n")
+	else:
+		f = open(output, "a")
+		f.write("----------------- Rationals -------------------\n")
+
 	n = instance.getN()
 	dict_instance = instance.getFunction()
 
-	def f1(p):
-		return dict_instance[to_int(p)]
+	if type == "rational":
+		for p in dict_instance:
+			dict_instance[p] = fourier.Rational(int(dict_instance[p]),1)
 
-	ft = fourier.FourierTransform(n, dict_instance, mode)
+	if type == "double":
+		ft = fourier.FourierTransform_double(n, dict_instance, mode, 6)
+	else:
+		ft = fourier.FourierTransform_Rational(n, dict_instance, mode, 6)
+	
+	def f1(p):
+		fr = dict_instance[to_int(p)]
+		return fr if isinstance(fr,float) else Fraction(fr.numerator, fr.denominator)
 
 	#showNormalOrder(n, f1)
 	#showSortedOrder(n, f1)
@@ -129,7 +144,8 @@ def analysis(instance, output, mode="YSR"):
 	for firstLine in range(0,n):
 		
 		def f2(p):
-			return ft.inverseFT(p, firstLine)
+			fr = ft.inverseFT(p, firstLine)
+			return fr if isinstance(fr, float) else Fraction(fr.numerator,fr.denominator)
 		
 		#showPermutationRanking(n, f2)
 		val, f1Min, f1Max, f2Min, f2Max = maeMaxMin(f1, f2, n)
@@ -165,4 +181,6 @@ if __name__ == '__main__':
 		instance = FunctionFromSamples(args.instance)
 	else:
 		raise ValueError(f'Unsupported problem: {args.problem}')
-	analysis(instance, args.output, args.mode)
+	
+	analysis(instance, args.output, args.mode, "double")
+	analysis(instance, args.output, args.mode, "rational")

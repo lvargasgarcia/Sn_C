@@ -1,6 +1,7 @@
 #ifndef FOURIERTRANSFORM_HPP
 #define FOURIERTRANSFORM_HPP
 
+
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -8,6 +9,9 @@
 #include <numeric>
 #include <tuple>
 #include <chrono>
+#include <future>  
+
+#include <mutex>  
 #include "eigen-3.4.0/Eigen/Core"
 #include "eigen-3.4.0/Eigen/Sparse"
 #include "eigen-3.4.0/Eigen/Dense"
@@ -45,7 +49,7 @@ template <typename T> class FourierTransform {
     map<int, T> invFT;
     string williams_seq;
 
-    FourierTransform(int n, map<int,T> f, string mode) {
+    FourierTransform(int n, map<int,T> f, string mode, int nthreads) {
         
         this->partitions = integer_partitions(n);
         this->n = n;
@@ -64,17 +68,121 @@ template <typename T> class FourierTransform {
             inv_ft_orders.push_back(SnVector::Zero(nfact));
         }
         
-        for(auto partition : partitions){
-            
-            cout << "Calculating coefficient for partition: " << to_int(partition) << endl;
-            auto irrep = Irrep<T>(partition,mode);
-            this->irreps.emplace(to_int(partition), irrep);
-            cout << "D_lambda" << irrep.d_lambda << endl;
-            auto info = calculate_coefficient(this->irreps[to_int(partition)], f, this->nfact);
-            this->coefficients.emplace(to_int(partition), info.first);
-            inverse_ft.emplace(to_int(partition), info.second);
+        // Forma secuencial
 
+        // for(auto partition : partitions){
+            
+        //     cout << "Calculating coefficient for partition: " << to_int(partition) << endl;
+        //     auto irrep = Irrep<T>(partition,mode);
+        //     this->irreps.emplace(to_int(partition), irrep);
+        //     cout << "D_lambda" << irrep.d_lambda << endl;
+        //     auto info = calculate_coefficient(this->irreps[to_int(partition)], f, this->nfact);
+        //     this->coefficients.emplace(to_int(partition), info.first);
+        //     inverse_ft.emplace(to_int(partition), info.second);
+
+        // }
+
+        // Using mutex for thread-safe updates to shared data structures
+        // std::mutex mtx;
+        // std::mutex cout_mutex;
+
+        // // Parallel execution using std::async
+        // std::vector<std::future<void>> futures;
+        
+        // // Launch a task for each partition
+        // for(auto partition : partitions){
+        //     futures.push_back(std::async(std::launch::async, [this, &mtx, &cout_mutex, &inverse_ft, partition]() {
+                
+        //         double t_0 = std::chrono::system_clock::now().time_since_epoch().count();
+        //         string task = "---- Task " + to_string(to_int(partition));
+                
+        //         {
+        //             std::lock_guard<std::mutex> lock(cout_mutex);
+        //             cout << task << " started" << endl;
+                    
+        //         }
+
+                
+        //         auto irrep = Irrep<T>(partition, this->mode);
+
+        //         {
+        //             std::lock_guard<std::mutex> lock(cout_mutex);
+        //             cout << task << " d_lambda: " << irrep.d_lambda << endl;
+        //         }
+                
+        //         // Thread-safe update of the irreps map
+        //         {
+        //             std::lock_guard<std::mutex> lock(mtx);
+        //             this->irreps.emplace(to_int(partition), irrep);
+        //         }
+                
+        //         auto info = calculate_coefficient(irrep, this->f, this->nfact);
+                
+        //         // Thread-safe update of the coefficients and inverse_ft maps
+        //         {
+        //             std::lock_guard<std::mutex> lock(mtx);
+        //             this->coefficients.emplace(to_int(partition), info.first);
+        //             inverse_ft.emplace(to_int(partition), info.second);
+        //         }
+
+        //         double t_1 = std::chrono::system_clock::now().time_since_epoch().count();
+
+        //         {
+        //             std::lock_guard<std::mutex> lock(cout_mutex);
+        //             cout << task << " finished in " << (t_1 - t_0) / 1e9 << " seconds" << endl;
+        //         }
+
+        //     }));
+        // }
+
+        // Parallel loop using OpenMP with inline thread count specification
+        #pragma omp parallel for num_threads(nthreads) schedule(dynamic)
+        for(int i = 0; i < partitions.size(); i++) {
+            auto partition = partitions[i];
+            
+            double t_0 = std::chrono::system_clock::now().time_since_epoch().count();
+            string task = "---- Task " + to_string(to_int(partition));
+            
+            // Thread-safe output
+            #pragma omp critical(cout)
+            {
+                cout << task << " started" << endl;
+            }
+            
+            auto irrep = Irrep<T>(partition, this->mode);
+            
+            #pragma omp critical(cout)
+            {
+                cout << task << " d_lambda: " << irrep.d_lambda << endl;
+            }
+            
+            // Thread-safe update of the irreps map
+            #pragma omp critical(maps)
+            {
+                this->irreps.emplace(to_int(partition), irrep);
+            }
+            
+            auto info = calculate_coefficient(irrep, this->f, this->nfact);
+            
+            // Thread-safe update of the coefficients and inverse_ft maps
+            #pragma omp critical(maps)
+            {
+                this->coefficients.emplace(to_int(partition), info.first);
+                inverse_ft.emplace(to_int(partition), info.second);
+            }
+            
+            double t_1 = std::chrono::system_clock::now().time_since_epoch().count();
+            
+            #pragma omp critical(cout)
+            {
+                cout << task << " finished in " << (t_1 - t_0) / 1e9 << " seconds" << endl;
+            }
         }
+        
+        // // Wait for all tasks to complete
+        // for(auto& future : futures) {
+        //     future.wait();
+        // }
 
         for(auto partition : partitions){
             int order = n - partition[0];
@@ -137,8 +245,6 @@ template <typename T> class FourierTransform {
     }
 
     static pair<Matrix,SnVector> calculate_coefficient(Irrep<T> irrep, map<int, T> f, int nfact){
-        
-        double t_0 = std::chrono::system_clock::now().time_since_epoch().count();
 
         vector<T> invFT;
 
@@ -224,8 +330,6 @@ template <typename T> class FourierTransform {
             k++;
         }
 
-        double t_1 = std::chrono::system_clock::now().time_since_epoch().count();
-        cout << "Time taken: " << (t_1 - t_0)/(pow(10,9)) << " seconds" << endl;
         coefficient.transposeInPlace();
         auto eigen_vec = Eigen::Map<SnVector>(invFT.data(), invFT.size());
         return make_pair(coefficient, factor*eigen_vec);
