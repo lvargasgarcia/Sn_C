@@ -341,6 +341,26 @@ template <typename T> class FourierTransform {
         return vec_A.dot(vec_B);
     }
 
+    // static inline T frobenius_inner_product(Matrix& A, SparseMatrix& B) {
+    //     // Convert dense matrix A to a vector
+    //     Eigen::Map<SnVector> vec_A(A.data(), A.cols()*A.rows());
+        
+    //     // For sparse matrix B, we need to use a different approach
+    //     // Create a temporary sparse vector by copying the data
+    //     SnVector vec_B(B.cols()*B.rows());
+        
+    //     // Fill vec_B using B's non-zero entries
+    //     for (int k = 0; k < B.outerSize(); ++k) {
+    //         for (typename SparseMatrix::InnerIterator it(B, k); it; ++it) {
+    //             int linear_index = it.row() + it.col() * B.rows(); // Column-major layout
+    //             vec_B.coeffRef(linear_index) = it.value();
+    //         }
+    //     }
+        
+    //     // Now compute the dot product
+    //     return vec_A.dot(vec_B);
+    // }
+
     
     static inline T frobenius_inner_product(const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>& A, 
                                             const Eigen::SparseMatrix<T, Eigen::ColMajor>& B) {
