@@ -3,8 +3,6 @@
 #include <random>
 #include "rationalscalar.hpp"
 #include <chrono>
-#include <gmpxx.h>
-#include <boost/rational.hpp>
 
 using namespace std;
 
@@ -19,10 +17,7 @@ double normal_random(double mean, double stddev) {
     // Generate and return a random number from the distribution
     return distribution(gen);
 }
-template <typename T>
-boost::rational<T> sqrt(boost::rational<T>& r){
-    return boost::rational<T>(0);
-}
+
 
 // mpq_class sqrt(mpq_class x) {
 //     return mpq_class(0);
@@ -62,7 +57,11 @@ int main() {
         cout << "f(" << to_int(permutation) << ") = " << f[to_int(permutation)] << endl;
     }
 
-    auto ft1 = FourierTransform<MpqScalar>(n, f, "YKR", 7);
+    auto ft1 = FourierTransform<MpqScalar>(n, f, "YKR", 14);
+
+    ft1.build_coefficients();
+
+    ft1.inverse_fourier_transform();
     // auto ft2 = FourierTransform<double>(n, f1, "YKR", 4);
 
 
@@ -89,6 +88,13 @@ int main() {
     for(int i = 0; i < errores_maximos.size(); i++){
         cout << "Orden " << i << " : " << errores_maximos[i] << endl;
     }
+
+    // auto irrep = Irrep<double>({4,2}, "YKR");
+
+    // for(auto pi : perms){
+    //     cout << "Permutation: " << to_int(pi) << endl;
+    //     cout << irrep.evaluate(pi) << endl;
+    // }
 
     // for(auto [key, value] : ft1.coefficients){
     //     cout << "Partition: " << key << endl;
@@ -120,11 +126,6 @@ int main() {
     double t_1 = std::chrono::system_clock::now().time_since_epoch().count();
 
     cout << "Execution time: " << (t_1 - t_0) / 1e9 << " seconds" << endl;
-
-    std::cout << "Size of int: " << sizeof(int) << " bytes" << std::endl;
-    std::cout << "Size of long: " << sizeof(long) << " bytes" << std::endl;
-    std::cout << "Size of long long: " << sizeof(long long) << " bytes" << std::endl;
-    cout << "Size of int128_t: " << sizeof(__int128_t) << " bytes" << endl;
 
     return 0;
 }

@@ -63,6 +63,7 @@ template <typename T> class Irrep {
         for(int i = 1; i < transpositions.size(); i++){
             result = result * matrices[transpositions[i] - 2];
         }
+        //cout << result << endl;
         return result;
     }
 

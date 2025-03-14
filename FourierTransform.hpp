@@ -47,7 +47,9 @@ template <typename T> class FourierTransform {
     map<int, Irrep<T>> irreps;
     map<int, T> f;
     map<int, T> invFT;
-    string williams_seq;
+    map<int,SnVector> inverse_ft;
+    vector<SnVector> inv_ft_orders;
+    int num__threads;
 
     FourierTransform(int n, map<int,T> f, string mode, int nthreads) {
         
@@ -59,84 +61,24 @@ template <typename T> class FourierTransform {
         }
         this->mode = mode;
         this->f = f;
-        this->williams_seq = williams_sequence(n);
-        
-        map<int,SnVector> inverse_ft;
-        vector<SnVector> inv_ft_orders;
+        this->num__threads = nthreads;
+
+        for(auto p : partitions){
+            auto irrep = Irrep<T>(p, this->mode);
+            inverse_ft.emplace(to_int(p), SnVector::Zero(nfact));
+            this->irreps.emplace(to_int(p), irrep);
+            this->coefficients.emplace(to_int(p), Matrix::Zero(irrep.matrices[0].rows(), irrep.matrices[0].cols()));
+        }
 
         for(size_t i = 0; i < n; i++){
             inv_ft_orders.push_back(SnVector::Zero(nfact));
         }
+
+    }
+
+    void build_coefficients(){
         
-        // Forma secuencial
-
-        // for(auto partition : partitions){
-            
-        //     cout << "Calculating coefficient for partition: " << to_int(partition) << endl;
-        //     auto irrep = Irrep<T>(partition,mode);
-        //     this->irreps.emplace(to_int(partition), irrep);
-        //     cout << "D_lambda" << irrep.d_lambda << endl;
-        //     auto info = calculate_coefficient(this->irreps[to_int(partition)], f, this->nfact);
-        //     this->coefficients.emplace(to_int(partition), info.first);
-        //     inverse_ft.emplace(to_int(partition), info.second);
-
-        // }
-
-        // Using mutex for thread-safe updates to shared data structures
-        // std::mutex mtx;
-        // std::mutex cout_mutex;
-
-        // // Parallel execution using std::async
-        // std::vector<std::future<void>> futures;
-        
-        // // Launch a task for each partition
-        // for(auto partition : partitions){
-        //     futures.push_back(std::async(std::launch::async, [this, &mtx, &cout_mutex, &inverse_ft, partition]() {
-                
-        //         double t_0 = std::chrono::system_clock::now().time_since_epoch().count();
-        //         string task = "---- Task " + to_string(to_int(partition));
-                
-        //         {
-        //             std::lock_guard<std::mutex> lock(cout_mutex);
-        //             cout << task << " started" << endl;
-                    
-        //         }
-
-                
-        //         auto irrep = Irrep<T>(partition, this->mode);
-
-        //         {
-        //             std::lock_guard<std::mutex> lock(cout_mutex);
-        //             cout << task << " d_lambda: " << irrep.d_lambda << endl;
-        //         }
-                
-        //         // Thread-safe update of the irreps map
-        //         {
-        //             std::lock_guard<std::mutex> lock(mtx);
-        //             this->irreps.emplace(to_int(partition), irrep);
-        //         }
-                
-        //         auto info = calculate_coefficient(irrep, this->f, this->nfact);
-                
-        //         // Thread-safe update of the coefficients and inverse_ft maps
-        //         {
-        //             std::lock_guard<std::mutex> lock(mtx);
-        //             this->coefficients.emplace(to_int(partition), info.first);
-        //             inverse_ft.emplace(to_int(partition), info.second);
-        //         }
-
-        //         double t_1 = std::chrono::system_clock::now().time_since_epoch().count();
-
-        //         {
-        //             std::lock_guard<std::mutex> lock(cout_mutex);
-        //             cout << task << " finished in " << (t_1 - t_0) / 1e9 << " seconds" << endl;
-        //         }
-
-        //     }));
-        // }
-
-        // Parallel loop using OpenMP with inline thread count specification
-        #pragma omp parallel for num_threads(nthreads) schedule(dynamic)
+        #pragma omp parallel for num_threads(1) schedule(dynamic)
         for(int i = 0; i < partitions.size(); i++) {
             auto partition = partitions[i];
             
@@ -149,26 +91,18 @@ template <typename T> class FourierTransform {
                 cout << task << " started" << endl;
             }
             
-            auto irrep = Irrep<T>(partition, this->mode);
+            auto irrep = this->irreps[to_int(partition)];
             
             #pragma omp critical(cout)
             {
                 cout << task << " d_lambda: " << irrep.d_lambda << endl;
             }
             
-            // Thread-safe update of the irreps map
+            auto coef = calculate_coefficient(irrep, this->f, this->nfact, this->num__threads);
+            
             #pragma omp critical(maps)
             {
-                this->irreps.emplace(to_int(partition), irrep);
-            }
-            
-            auto info = calculate_coefficient(irrep, this->f, this->nfact);
-            
-            // Thread-safe update of the coefficients and inverse_ft maps
-            #pragma omp critical(maps)
-            {
-                this->coefficients.emplace(to_int(partition), info.first);
-                inverse_ft.emplace(to_int(partition), info.second);
+                this->coefficients[to_int(partition)] = coef;
             }
             
             double t_1 = std::chrono::system_clock::now().time_since_epoch().count();
@@ -178,11 +112,52 @@ template <typename T> class FourierTransform {
                 cout << task << " finished in " << (t_1 - t_0) / 1e9 << " seconds" << endl;
             }
         }
+
+    }
+
+    void inverse_fourier_transform(){
         
-        // // Wait for all tasks to complete
-        // for(auto& future : futures) {
-        //     future.wait();
-        // }
+        #pragma omp parallel for num_threads(1) schedule(dynamic)
+        for(int i = 0; i < partitions.size(); i++) {
+            auto partition = partitions[i];
+            
+            double t_0 = std::chrono::system_clock::now().time_since_epoch().count();
+            string task = "---- Task " + to_string(to_int(partition));
+            
+            // Thread-safe output
+            #pragma omp critical(cout)
+            {
+                cout << task << " started" << endl;
+            }
+            
+            auto irrep = this->irreps[to_int(partition)];
+            
+            #pragma omp critical(cout)
+            {
+                cout << task << " d_lambda: " << irrep.d_lambda << endl;
+            }
+            
+            auto coef = this->coefficients[to_int(partition)];
+            if(!(coef == Matrix::Zero(irrep.matrices[0].rows(), irrep.matrices[0].cols()))){
+                
+                auto vec = invFT_coef(irrep, this->f, this->nfact, coef, this->num__threads);
+            
+                // Thread-safe update of the coefficients and inverse_ft maps
+                #pragma omp critical(maps)
+                {
+                    this->inverse_ft[to_int(partition)] = vec;
+                }
+
+            }
+            
+            double t_1 = std::chrono::system_clock::now().time_since_epoch().count();
+            
+            #pragma omp critical(cout)
+            {
+                cout << task << " finished in " << (t_1 - t_0) / 1e9 << " seconds" << endl;
+            }
+        }
+
 
         for(auto partition : partitions){
             int order = n - partition[0];
@@ -194,6 +169,7 @@ template <typename T> class FourierTransform {
         for(size_t i = 0; i < n; i++){
             build_inv_ft(inv_ft_orders[i], i);
         }
+
     }
 
     T inverseFT(vector<int> pi, int order){
@@ -244,124 +220,218 @@ template <typename T> class FourierTransform {
         }
     }
 
-    static pair<Matrix,SnVector> calculate_coefficient(Irrep<T> irrep, map<int, T> f, int nfact){
+    void set_coefficient(vector<vector<T>> &coef, vector<int> partition){
 
-        vector<T> invFT;
-
-        int n = irrep.n;
-
-        vector<int> tau;
-        tau.push_back(2);
-        tau.push_back(1);
-        for(size_t i = 3; i <= n; i++){
-            tau.push_back(i);
-        }
-    
-        vector<int> sigma;
-        for(size_t i = 1; i < n; i++){
-            sigma.push_back(i+1);
-        }
-        sigma.push_back(1);
-    
-        vector<int> q;
-        for(size_t i = 1; i <= n; i++){
-            q.push_back(n-i+1);
-        }
-    
-        auto qtau = compose(q, tau);
-        auto qsigma = compose(q, sigma);
-        auto qsigmatau = compose(qsigma, tau);
-        auto invSigma = inverse(sigma);
-    
-        auto p = compose(qsigma, tau);
-
-        auto p_matrix = irrep.evaluate(p);
-        auto tau_matrix = irrep.evaluate(tau);
-        auto invSigma_matrix = irrep.evaluate(invSigma);
-
-        Matrix coefficient = f[to_int(p)]*p_matrix;
-
-        while(p != qtau){
-            if(p != qsigmatau){
-                if(williamsCondition(p,n) && p != qsigma){
-                    p = compose(p, tau);
-                    p_matrix = p_matrix * tau_matrix;
-                }else{
-                    p = compose(p, invSigma);
-                    p_matrix = p_matrix * invSigma_matrix;
-                }
-            }else{
-                p = compose(p, invSigma);
-                p_matrix = p_matrix * invSigma_matrix;
+        Matrix new_matrix = Matrix(coef.size(), coef[0].size());
+        for(size_t i = 0; i < coef.size(); i++){
+            for(size_t j = 0; j < coef[i].size(); j++){
+                new_matrix(i,j) = coef[i][j];
             }
-            coefficient = coefficient + f[to_int(p)]*p_matrix;
         }
 
-        p = compose(qsigma, tau);
-
-        auto p_matrix_ = (irrep.evaluate(p));
-        auto tau_matrix_ = (tau_matrix);
-        auto invSigma_matrix_ = (invSigma_matrix);
-
-        T factor = T(coefficient.rows()) / T(nfact);
-        int k = 0;
-
-        coefficient.transposeInPlace();
-
-        T coef = frobenius_inner_product(coefficient, p_matrix_);
-        invFT.push_back(coef);
-        k++;
-
-        while(p != qtau){
-            if(p != qsigmatau){
-                if(williamsCondition(p,n) && p != qsigma){
-                    p = compose(p, tau);
-                    p_matrix_ = p_matrix_ * tau_matrix_;
-                }else{
-                    p = compose(p, invSigma);
-                    p_matrix_ = p_matrix_ * invSigma_matrix_;
-                }
-            }else{
-                p = compose(p, invSigma);
-                p_matrix_ = p_matrix_ * invSigma_matrix_;
-            }
-            T coef = frobenius_inner_product(coefficient, (p_matrix_));
-            invFT.push_back(coef);
-            k++;
-        }
-
-        coefficient.transposeInPlace();
-        auto eigen_vec = Eigen::Map<SnVector>(invFT.data(), invFT.size());
-        return make_pair(coefficient, factor*eigen_vec);
+        this->coefficients[to_int(partition)] = new_matrix;
     }
 
-    static inline T frobenius_inner_product(Matrix& A, Matrix& B){
-        Eigen::Map<SnVector> vec_A(A.data(), A.cols()*A.rows());
-        Eigen::Map<SnVector> vec_B(B.data(), B.cols()*B.rows());
-        return vec_A.dot(vec_B);
-    }
+    // static Matrix calculate_coefficient(Irrep<T> irrep, map<int, T> f, int nfact){
 
-    // static inline T frobenius_inner_product(Matrix& A, SparseMatrix& B) {
-    //     // Convert dense matrix A to a vector
-    //     Eigen::Map<SnVector> vec_A(A.data(), A.cols()*A.rows());
-        
-    //     // For sparse matrix B, we need to use a different approach
-    //     // Create a temporary sparse vector by copying the data
-    //     SnVector vec_B(B.cols()*B.rows());
-        
-    //     // Fill vec_B using B's non-zero entries
-    //     for (int k = 0; k < B.outerSize(); ++k) {
-    //         for (typename SparseMatrix::InnerIterator it(B, k); it; ++it) {
-    //             int linear_index = it.row() + it.col() * B.rows(); // Column-major layout
-    //             vec_B.coeffRef(linear_index) = it.value();
-    //         }
+    //     int n = irrep.n;
+
+    //     vector<int> tau;
+    //     tau.push_back(2);
+    //     tau.push_back(1);
+    //     for(size_t i = 3; i <= n; i++){
+    //         tau.push_back(i);
     //     }
-        
-    //     // Now compute the dot product
-    //     return vec_A.dot(vec_B);
+    
+    //     vector<int> sigma;
+    //     for(size_t i = 1; i < n; i++){
+    //         sigma.push_back(i+1);
+    //     }
+    //     sigma.push_back(1);
+    
+    //     vector<int> q;
+    //     for(size_t i = 1; i <= n; i++){
+    //         q.push_back(n-i+1);
+    //     }
+    
+    //     auto qtau = compose(q, tau);
+    //     auto qsigma = compose(q, sigma);
+    //     auto qsigmatau = compose(qsigma, tau);
+    //     auto invSigma = inverse(sigma);
+    
+    //     auto p = compose(qsigma, tau);
+
+    //     auto p_matrix = irrep.evaluate(p);
+    //     auto tau_matrix = irrep.evaluate(tau);
+    //     auto invSigma_matrix = irrep.evaluate(invSigma);
+
+    //     Matrix coefficient = f[to_int(p)]*p_matrix;
+
+    //     while(p != qtau){
+    //         if(p != qsigmatau){
+    //             if(williamsCondition(p,n) && p != qsigma){
+    //                 p = compose(p, tau);
+    //                 p_matrix = p_matrix * tau_matrix;
+    //             }else{
+    //                 p = compose(p, invSigma);
+    //                 p_matrix = p_matrix * invSigma_matrix;
+    //             }
+    //         }else{
+    //             p = compose(p, invSigma);
+    //             p_matrix = p_matrix * invSigma_matrix;
+    //         }
+    //         coefficient = coefficient + f[to_int(p)]*p_matrix;
+    //     }
+
+    //     cout << coefficient << endl;
+
+    //     return coefficient;
     // }
 
+    template <typename U>
+    static inline vector<std::vector<U>> split_vector(const vector<U> vec, int k) {
+        vector<vector<U>> result;
+        int n = vec.size();
+        int chunk = n / k;
+
+        int start = 0;
+        for (int i = 0; i < k; i++) {
+            vector<U> currVector(chunk);
+            for (int j = start; j < chunk*(i + 1); j++) {
+                currVector[j - start] = (vec[j]);
+            }
+            result.push_back(currVector);
+            start += chunk;
+        }
+        return result;
+    }
     
+    static Matrix calculate_coefficient(Irrep<T> irrep, map<int, T> f, int nfact, int num__threads){
+
+        auto perms = permutations(irrep.n);
+
+        auto parts = split_vector(perms, num__threads);
+
+        auto coef = Matrix(irrep.matrices[0].rows(), irrep.matrices[0].cols()).setZero();
+
+        
+        #pragma omp parallel for num_threads(num__threads) 
+        for(int i = 0; i < parts.size(); i++){
+            
+            auto local_coef = (f[to_int(parts[i][0])]*irrep.evaluate(parts[i][0])).toDense();
+            for(int j = 1; j < parts[i].size(); j++){
+                local_coef += f[to_int(parts[i][j])]*irrep.evaluate(parts[i][j]);
+            }
+
+            #pragma omp critical
+            {
+                coef += local_coef;
+            }
+        }
+
+        return coef;
+    }
+
+    static SnVector invFT_coef(Irrep<T> irrep, map<int,T> f, int nfact, Matrix coefficient, int num__threads){
+
+        auto perms = permutations(irrep.n);
+        auto chunk = nfact/num__threads;
+
+        coefficient.transposeInPlace();
+
+        vector<T> invFT(nfact);
+
+        auto parts = split_vector(perms, num__threads);
+        T factor = T(coefficient.rows()) / T(nfact);
+        
+        #pragma omp parallel for num_threads(num__threads) 
+        for(int i = 0; i < parts.size(); i++){
+            
+            vector<T> local_vec;
+            for(int j = 0; j < parts[i].size(); j++){
+                local_vec.push_back(frobenius_inner_product(coefficient, irrep.evaluate(parts[i][j])));
+            }
+
+            #pragma omp critical
+            {
+                for(int k = i*chunk; k<(i+1)*chunk; k++){
+                    invFT[k] = local_vec[k - i*chunk];
+                }
+            }
+        }
+
+        coefficient.transposeInPlace();
+
+        return factor*Eigen::Map<SnVector>(invFT.data(), invFT.size());
+    }
+
+    // static SnVector invFT_coef(Irrep<T> irrep, map<int,T> f, int nfact, Matrix coefficient){
+        
+
+        
+    //     vector<T> invFT;
+
+    //     int n = irrep.n;
+
+    //     vector<int> tau;
+    //     tau.push_back(2);
+    //     tau.push_back(1);
+    //     for(size_t i = 3; i <= n; i++){
+    //         tau.push_back(i);
+    //     }
+    
+    //     vector<int> sigma;
+    //     for(size_t i = 1; i < n; i++){
+    //         sigma.push_back(i+1);
+    //     }
+    //     sigma.push_back(1);
+    
+    //     vector<int> q;
+    //     for(size_t i = 1; i <= n; i++){
+    //         q.push_back(n-i+1);
+    //     }
+    
+    //     auto qtau = compose(q, tau);
+    //     auto qsigma = compose(q, sigma);
+    //     auto qsigmatau = compose(qsigma, tau);
+    //     auto invSigma = inverse(sigma);
+        
+    //     auto p = compose(qsigma, tau);
+
+    //     auto p_matrix_ = irrep.evaluate(p);
+    //     auto tau_matrix_ = irrep.evaluate(tau);
+    //     auto invSigma_matrix_ = irrep.evaluate(invSigma);
+
+    //     T factor = T(coefficient.rows()) / T(nfact);
+
+    //     coefficient.transposeInPlace();
+
+    //     T coef = frobenius_inner_product(coefficient, p_matrix_);
+    //     invFT.push_back(coef);
+
+    //     while(p != qtau){
+    //         if(p != qsigmatau){
+    //             if(williamsCondition(p,n) && p != qsigma){
+    //                 p = compose(p, tau);
+    //                 p_matrix_ = p_matrix_ * tau_matrix_;
+    //             }else{
+    //                 p = compose(p, invSigma);
+    //                 p_matrix_ = p_matrix_ * invSigma_matrix_;
+    //             }
+    //         }else{
+    //             p = compose(p, invSigma);
+    //             p_matrix_ = p_matrix_ * invSigma_matrix_;
+    //         }
+    //         T coef = frobenius_inner_product(coefficient, (p_matrix_));
+    //         invFT.push_back(coef);
+    //     }
+
+    //     coefficient.transposeInPlace();
+
+    //     auto eigen_vec = Eigen::Map<SnVector>(invFT.data(), invFT.size());
+    //     return factor*eigen_vec;
+    // }
+
     static inline T frobenius_inner_product(const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>& A, 
                                             const Eigen::SparseMatrix<T, Eigen::ColMajor>& B) {
         T result = 0;
@@ -372,8 +442,6 @@ template <typename T> class FourierTransform {
         }
         return result;
     }
-    
-    
 
 };
 
