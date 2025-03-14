@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Valores posibles para cada opción
-n_values=("5" "6" "7")
+n_values=("8")
 mode_values=("YKR" "YSR" "YOR")
-tolerance_values=("f" "r" "ftolerance")
+tolerance_values=("f" "ftolerance")
 
 # Ejecutar todas las combinaciones
 for n in "${n_values[@]}"; do

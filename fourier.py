@@ -127,15 +127,9 @@ def showPermutationRanking(n, f):
 	for p in allPermutations(n):
 		print(f'{p}\t{ranking[p]}')
 
-def analysis(epsilon, name, instance, mode="YSR", type="double"):
+def analysis(name, instance, mode="YSR", type="double"):
 	
-	info = {}
-
-	info["name"] = name + ":" + type
-	info["mode"] = mode
-	info["tolerance"] = epsilon
-
-	info["orders"] = {}
+	eps = [0,0.5]
 
 	n = instance.getN()
 	dict_instance = instance.getFunction()
@@ -149,61 +143,71 @@ def analysis(epsilon, name, instance, mode="YSR", type="double"):
 	else:
 		ft = fourier.FourierTransform_Rational(n, dict_instance, mode, 6)
 	
-	def f1(p):
-		fr = dict_instance[to_int(p)]
-		return fr if (isinstance(fr,float) or isinstance(fr, int)) else Fraction(fr.numerator, fr.denominator)
-
-	rankingF1 = permutationRanking(n, f1, epsilon)
-
-	for firstLine in range(0,n):
-		
-		info["orders"][firstLine] = {}
-
-		def f2(p):
-			fr = ft.inverseFT(p, firstLine)
-			return fr if isinstance(fr, float) else Fraction(fr.numerator,fr.denominator)
-		
-		#showPermutationRanking(n, f2)
-		val, f1Min, f1Max, f2Min, f2Max = maeMaxMin(f1, f2, n)
-		f2Min = (float)(f2Min)
-		f2Max = (float)(f2Max)
-		fRange = (instance.globalMax-instance.globalMin)
-		maeGOF1, globalOptimaF1, maeGOF2, globalOptimaF2, preservedGlobalOptima = maeOfGlobalOptima(f1, f2, n, epsilon)
-
-		rankingF2 = permutationRanking(n, f2, epsilon)
-
-		maeRanking, _, _, _, _ = maeMaxMin(rankingF1, rankingF2, n)
-		distance_gos = float(distance_of_GOs(f1,f2,n))
-		val = float(val)
-		maeGOF1 = float(maeGOF1)
-		maeGOF2 = float(maeGOF2)
-		globalOptimaF1 = float(globalOptimaF1)
-		globalOptimaF2 = float(globalOptimaF2)
-		maeRanking = float(maeRanking)
-		info["orders"][firstLine]["MAE"] = val
-		info["orders"][firstLine]["Normalized MAE"] = val/fRange
-		info["orders"][firstLine]["F1 Min"] = f1Min
-		info["orders"][firstLine]["F1 Max"] = f1Max
-		info["orders"][firstLine]["F2 Min"] = f2Min
-		info["orders"][firstLine]["F2 Max"] = f2Max
-		info["orders"][firstLine]["MAE-GO Orig"] = maeGOF1
-		info["orders"][firstLine]["Normalized MAE-GO Orig"] = maeGOF1 / fRange
-		info["orders"][firstLine]["GO Orig"] = globalOptimaF1
-		info["orders"][firstLine]["MAE-GO Trunc"] = maeGOF2
-		info["orders"][firstLine]["Normalized MAE-GO Trunc"] = maeGOF2 / fRange
-		info["orders"][firstLine]["GO Trunc"] = globalOptimaF2
-		info["orders"][firstLine]["Ranking MAE"] = maeRanking
-		info["orders"][firstLine]["Preserved GO"] = preservedGlobalOptima
-		info["orders"][firstLine]["NPGO"] = preservedGlobalOptima/globalOptimaF1
-		info["orders"][firstLine]["Distance GOs"] = distance_gos
-		info["orders"][firstLine]["Normalized distance GOs"] = distance_gos/fRange
-
-		# f.write(f'{firstLine}\t{val}\t{val/fRange}\t{f1Min}\t{f1Max}\t{f2Min}\t{f2Max}\t{maeGOF1}\t{maeGOF1 / fRange}\t{globalOptimaF1}\t{maeGOF2}\t{maeGOF2 / fRange}\t{globalOptimaF2}\t{maeRanking}\t{preservedGlobalOptima}\n')
+	for epsilon in eps:
 	
-	#f.close()
-	output_file = "./results/" + mode + "/" + ("smwtp" if isinstance(instance, SMWTP) else "arp") + "/" + str(n) + "/"
-	name = os.path.splitext(name.split("/")[-1])[0]
-	json.dump(info, open(output_file + name + ("_fp" if type == "double" else "_r") + "_" + str(epsilon) + ".json", "w"), indent=4, default=str)
+		info = {}
+
+		info["name"] = name + ":" + type
+		info["mode"] = mode
+		info["tolerance"] = epsilon
+
+		info["orders"] = {}
+		
+		def f1(p):
+			fr = dict_instance[to_int(p)]
+			return fr if (isinstance(fr,float) or isinstance(fr, int)) else Fraction(fr.numerator, fr.denominator)
+
+		rankingF1 = permutationRanking(n, f1, epsilon)
+
+		for firstLine in range(0,n):
+			
+			info["orders"][firstLine] = {}
+
+			def f2(p):
+				fr = ft.inverseFT(p, firstLine)
+				return fr if isinstance(fr, float) else Fraction(fr.numerator,fr.denominator)
+			
+			#showPermutationRanking(n, f2)
+			val, f1Min, f1Max, f2Min, f2Max = maeMaxMin(f1, f2, n)
+			f2Min = (float)(f2Min)
+			f2Max = (float)(f2Max)
+			fRange = (instance.globalMax-instance.globalMin)
+			maeGOF1, globalOptimaF1, maeGOF2, globalOptimaF2, preservedGlobalOptima = maeOfGlobalOptima(f1, f2, n, epsilon)
+
+			rankingF2 = permutationRanking(n, f2, epsilon)
+
+			maeRanking, _, _, _, _ = maeMaxMin(rankingF1, rankingF2, n)
+			distance_gos = float(distance_of_GOs(f1,f2,n))
+			val = float(val)
+			maeGOF1 = float(maeGOF1)
+			maeGOF2 = float(maeGOF2)
+			globalOptimaF1 = float(globalOptimaF1)
+			globalOptimaF2 = float(globalOptimaF2)
+			maeRanking = float(maeRanking)
+			info["orders"][firstLine]["MAE"] = val
+			info["orders"][firstLine]["Normalized MAE"] = val/fRange
+			info["orders"][firstLine]["F1 Min"] = f1Min
+			info["orders"][firstLine]["F1 Max"] = f1Max
+			info["orders"][firstLine]["F2 Min"] = f2Min
+			info["orders"][firstLine]["F2 Max"] = f2Max
+			info["orders"][firstLine]["MAE-GO Orig"] = maeGOF1
+			info["orders"][firstLine]["Normalized MAE-GO Orig"] = maeGOF1 / fRange
+			info["orders"][firstLine]["GO Orig"] = globalOptimaF1
+			info["orders"][firstLine]["MAE-GO Trunc"] = maeGOF2
+			info["orders"][firstLine]["Normalized MAE-GO Trunc"] = maeGOF2 / fRange
+			info["orders"][firstLine]["GO Trunc"] = globalOptimaF2
+			info["orders"][firstLine]["Ranking MAE"] = maeRanking
+			info["orders"][firstLine]["Preserved GO"] = preservedGlobalOptima
+			info["orders"][firstLine]["NPGO"] = preservedGlobalOptima/globalOptimaF1
+			info["orders"][firstLine]["Distance GOs"] = distance_gos
+			info["orders"][firstLine]["Normalized distance GOs"] = distance_gos/fRange
+
+			# f.write(f'{firstLine}\t{val}\t{val/fRange}\t{f1Min}\t{f1Max}\t{f2Min}\t{f2Max}\t{maeGOF1}\t{maeGOF1 / fRange}\t{globalOptimaF1}\t{maeGOF2}\t{maeGOF2 / fRange}\t{globalOptimaF2}\t{maeRanking}\t{preservedGlobalOptima}\n')
+		
+		#f.close()
+		output_file = "./results/" + mode + "/" + ("smwtp" if isinstance(instance, SMWTP) else "arp") + "/" + str(n) + "/"
+		nomb = os.path.splitext(name.split("/")[-1])[0]
+		json.dump(info, open(output_file + nomb + ("_fp" if type == "double" else "_r") + "_" + str(epsilon) + ".json", "w"), indent=4, default=str)
 
 if __name__ == '__main__':
 	from argparse import ArgumentParser,RawDescriptionHelpFormatter,_StoreTrueAction,ArgumentDefaultsHelpFormatter,Action
@@ -224,7 +228,7 @@ if __name__ == '__main__':
 
 	# analysis(0.5, "instances/arp/arp_7_17.csv", FunctionFromSamples("instances/arp/arp_7_17.csv"), "r", "YSR", "double")
 	
-	analysis(0,args.instance, instance, args.mode, "double")
-	analysis(0.5,args.instance, instance, args.mode, "double")
-	if args.mode != "YOR":
-		analysis(0,args.instance, instance, args.mode, "rational")
+	analysis(args.instance, instance, args.mode, "double")
+	# analysis(0.5,args.instance, instance, args.mode, "double")
+	# if args.mode != "YOR":
+	# 	analysis(0,args.instance, instance, args.mode, "rational")

@@ -4,7 +4,7 @@ PROBLEM=$1
 
 FILE=instances_$PROBLEM.txt
 
-for i in {5,6,7}; do
+for i in {8,9}; do
     mkdir -p ./results/YKR/$PROBLEM/$i
     mkdir -p ./results/YOR/$PROBLEM/$i
     mkdir -p ./results/YSR/$PROBLEM/$i
